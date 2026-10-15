@@ -1,5 +1,7 @@
 # DSA Visual Lab
 
+**Antriksha Jain** · App ID 2409038 · B.Tech in AI, ML & Computer Science · Atlas SkillTech University
+
 Interactive, step-by-step visualisations of six classic algorithms. Every animation is driven by the algorithm's **real execution**: each engine runs on your input, records a snapshot after every operation, and the UI replays that trace forwards and backwards.
 
 **Stack:** React 18 · TypeScript · Vite · React Router · Vitest. No UI or animation libraries; visuals are hand-built SVG and CSS.
@@ -75,11 +77,11 @@ npm run dev        # http://localhost:5173
 Edit the defaults in `src/config.ts`, or set environment variables (see `.env.example`):
 
 ```
-VITE_APP_ID=DSA-2026-042
-VITE_AUTHOR=Your Name
-VITE_INSTITUTION=Your Institution
-VITE_COURSE=Data Structures & Algorithms
-VITE_ROLL_NUMBER=Roll No. 42
+VITE_APP_ID=2409038
+VITE_AUTHOR=Antriksha Jain
+VITE_INSTITUTION=Atlas SkillTech University
+VITE_COURSE=B.Tech in AI, ML & Computer Science
+VITE_ROLL_NUMBER=            # optional — leave empty to hide the row
 ```
 
 Put local values in `.env.local`, which is git-ignored. No secrets are needed to run or deploy this app.

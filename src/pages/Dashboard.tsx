@@ -23,14 +23,16 @@ const LINKS = [
 export default function Dashboard() {
   const nav = useNavigate();
   const c = APP_CONFIG;
-  const rows: [string, string][] = [
-    ['Project', c.projectTitle],
-    ['Author', c.author],
-    ['Institution', c.institution],
-    ['Course', c.course],
-    ['Roll / ID', c.rollNumber],
-    ['Version', `v${c.version} · ${c.year}`],
-  ];
+  const rows = (
+    [
+      ['Project', c.projectTitle],
+      ['Author', c.author],
+      ['Institution', c.institution],
+      ['Course', c.course],
+      ['Roll No.', c.rollNumber],
+      ['Version', `v${c.version} · ${c.year}`],
+    ] as [string, string][]
+  ).filter(([, v]) => v.trim() !== '');
   return (
     <main className="dash">
       <div className="dash-bg" aria-hidden="true">
