@@ -38,7 +38,7 @@ export default function NQueensPage() {
       onRandomize={randomize}
       steps={trace.steps}
       player={player}
-      pseudocode={QUEENS_PSEUDOCODE}
+      code={{ title: 'Pseudocode · N-Queens backtracking', lines: QUEENS_PSEUDOCODE }}
       note={trace.truncated ? 'Very long search: later checks were condensed; every solution is still recorded.' : null}
       inputs={
         <>

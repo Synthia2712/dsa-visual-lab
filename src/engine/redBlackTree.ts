@@ -1,3 +1,4 @@
+import { lineOf, RBT_JAVA } from './javaSource';
 import type { Step, Trace } from './types';
 
 export type RBColor = 'R' | 'B';
@@ -35,18 +36,26 @@ export interface RBResult {
   keyStart: number[];
 }
 
-export const RB_PSEUDOCODE = [
-  'insert(k): descend from root comparing keys',
-  '  attach new node z as RED leaf',
-  'while parent(z) is RED:',
-  '  Case 1 — uncle(z) is RED:',
-  '    parent, uncle → BLACK; grandparent → RED; z = grandparent',
-  '  Case 2 — z is an inner child (triangle):',
-  '    z = parent; rotate at z toward the outside',
-  '  Case 3 — z is an outer child (line):',
-  '    parent → BLACK, grandparent → RED; rotate at grandparent',
-  'root.color = BLACK',
-];
+/** Code panel listing + the line each kind of step highlights (matches insert/insertFixup). */
+export const RB_CODE = RBT_JAVA;
+const J = {
+  descent: lineOf(RBT_JAVA, 'while (cur != NIL)'),
+  dup: lineOf(RBT_JAVA, 'return; // ignore duplicates'),
+  step: lineOf(RBT_JAVA, 'cur = (key < cur.key)'),
+  rootBlack: lineOf(RBT_JAVA, 'node.color = BLACK;'),
+  linkL: lineOf(RBT_JAVA, 'parent.left = node;'),
+  linkR: lineOf(RBT_JAVA, 'parent.right = node;'),
+  whileRed: lineOf(RBT_JAVA, 'while (node.parent.color == RED)'),
+  uncle: lineOf(RBT_JAVA, 'Node uncle ='),
+  case1: lineOf(RBT_JAVA, 'grandparent.color = RED;'),
+  climb: lineOf(RBT_JAVA, 'node = grandparent;'),
+  rotL: lineOf(RBT_JAVA, 'rotateLeft(node);'),
+  rotR: lineOf(RBT_JAVA, 'rotateRight(node);'),
+  case3: lineOf(RBT_JAVA, 'node.parent.color = BLACK; // new top'),
+  case3R: lineOf(RBT_JAVA, 'rotateRight(grandparent);'),
+  case3L: lineOf(RBT_JAVA, 'rotateLeft(grandparent);'),
+  rootEnd: lineOf(RBT_JAVA, 'root.color = BLACK;'),
+};
 
 class RBEngine {
   nodes: Record<number, RBNode> = {};
@@ -112,102 +121,122 @@ class RBEngine {
     this.rotations++;
   }
 
-  /** Returns false if the key was a duplicate. */
+  /** Mirrors RedBlackTree.insert(int key) from the notes. Returns false for duplicates. */
   insert(key: number): boolean {
     this.inserting = key;
+    let parent: number | null = null; // NIL
     let cur = this.root;
-    let parent: number | null = null;
-    if (cur === null) this.snap(`Insert ${key}: tree is empty, ${key} becomes the root.`, 'info', 0);
+    if (cur === null) this.snap(`insert(${key}): cur = root = NIL, so the descent loop is skipped.`, 'info', J.descent);
     while (cur !== null) {
+      parent = cur;
       const c = this.n(cur);
       if (key === c.key) {
-        this.snap(`${key} already exists — duplicates are ignored.`, 'warn', 0, cur);
+        this.snap(`key == cur.key (${key}) → return; duplicates are ignored.`, 'warn', J.dup, cur);
         this.inserting = null;
         return false;
       }
-      const dir = key < c.key ? 'left' : 'right';
-      this.snap(`Compare ${key} with ${c.key}: ${key} ${key < c.key ? '<' : '>'} ${c.key}, go ${dir}.`, 'compare', 0, cur);
-      parent = cur;
-      cur = dir === 'left' ? c.left : c.right;
+      const left = key < c.key;
+      this.snap(`parent = ${c.key}. ${key} ${left ? '<' : '>'} ${c.key} → cur = cur.${left ? 'left' : 'right'}.`, 'compare', J.step, cur);
+      cur = left ? c.left : c.right;
     }
     const id = this.nextId++;
     this.nodes[id] = { id, key, color: 'R', left: null, right: null, parent };
-    if (parent === null) this.root = id;
-    else if (key < this.n(parent).key) this.n(parent).left = id;
+    if (parent === null) {
+      this.root = id;
+      this.nodes[id].color = 'B';
+      this.snap(`parent == NIL → tree was empty: root = node, node.color = BLACK; return.`, 'action', J.rootBlack, id);
+      this.snap(`${key} inserted as the BLACK root.`, 'success', undefined, null);
+      this.inserting = null;
+      return true;
+    }
+    const goLeft = key < this.n(parent).key;
+    if (goLeft) this.n(parent).left = id;
     else this.n(parent).right = id;
     this.snap(
-      parent === null ? `Attach ${key} as a RED root.` : `Attach ${key} as a RED ${key < this.n(parent).key ? 'left' : 'right'} child of ${this.n(parent).key}.`,
+      `New RED node ${key} linked as ${this.n(parent).key}.${goLeft ? 'left' : 'right'}. Call insertFixup(node).`,
       'action',
-      1,
+      goLeft ? J.linkL : J.linkR,
       id,
-      parent === null ? [] : [parent],
+      [parent],
     );
     this.fixup(id);
     return true;
   }
 
-  fixup(z0: number) {
-    let z = z0;
-    while (this.n(z).parent !== null && this.isRed(this.n(z).parent)) {
-      const p = this.n(z).parent!;
-      const g = this.n(p).parent!; // a red parent is never the root, so g exists
-      const pIsLeft = this.n(g).left === p;
-      const u = pIsLeft ? this.n(g).right : this.n(g).left;
-      const zk = this.n(z).key;
+  /** Mirrors insertFixup(Node node). NIL is BLACK, so a null uncle counts as BLACK. */
+  fixup(start: number) {
+    let node = start;
+    for (;;) {
+      const p = this.n(node).parent;
+      if (p === null || !this.isRed(p)) {
+        this.snap(
+          p === null ? `node ${this.n(node).key} is the root (its parent is NIL, which is BLACK) → loop ends.` : `node.parent (${this.n(p).key}) is BLACK → loop ends.`,
+          'compare',
+          J.whileRed,
+          node,
+          p === null ? [] : [p],
+        );
+        break;
+      }
+      const grandparent = this.n(p).parent!; // a RED parent is never the root
+      const parentIsLeft = this.n(grandparent).left === p;
+      const uncle = parentIsLeft ? this.n(grandparent).right : this.n(grandparent).left;
+      const nk = this.n(node).key;
       const pk = this.n(p).key;
-      const gk = this.n(g).key;
-      this.snap(`Red-red violation: ${zk} and its parent ${pk} are both RED.`, 'warn', 2, z, [p, g, ...(u !== null ? [u] : [])]);
-      if (this.isRed(u)) {
-        this.snap(`Case 1: uncle ${this.n(u!).key} is RED → recolor parent & uncle BLACK, grandparent ${gk} RED.`, 'info', 3, z, [p, u!, g]);
+      const gk = this.n(grandparent).key;
+      const uTxt = uncle === null ? 'NIL (BLACK)' : `${this.n(uncle).key} (${this.isRed(uncle) ? 'RED' : 'BLACK'})`;
+      this.snap(
+        `node.parent ${pk} is RED (red-red with ${nk}). parentIsLeft = ${parentIsLeft}, grandparent = ${gk}, uncle = ${uTxt}.`,
+        'warn',
+        J.uncle,
+        node,
+        [p, grandparent, ...(uncle !== null ? [uncle] : [])],
+      );
+      if (this.isRed(uncle)) {
         this.n(p).color = 'B';
-        this.n(u!).color = 'B';
-        this.n(g).color = 'R';
+        this.n(uncle!).color = 'B';
+        this.n(grandparent).color = 'R';
         this.recolors += 3;
-        this.snap(`Recolored. Move z up to grandparent ${gk} and re-check.`, 'action', 4, g, [p, u!]);
-        z = g;
+        this.snap(`Case 1: uncle is RED → parent ${pk} & uncle ${this.n(uncle!).key} BLACK, grandparent ${gk} RED.`, 'action', J.case1, node, [p, uncle!, grandparent]);
+        node = grandparent;
+        this.snap(`node = grandparent (${gk}) — climb up and continue.`, 'info', J.climb, node);
         continue;
       }
-      const uncleTxt = u === null ? 'NIL (black)' : `${this.n(u).key} (black)`;
-      const inner = pIsLeft ? this.n(p).right === z : this.n(p).left === z;
-      let pp = p;
-      if (inner) {
-        const dir = pIsLeft ? 'left' : 'right';
-        this.snap(`Case 2: uncle is ${uncleTxt} and ${zk} is an inner child → rotate ${dir} at ${pk}.`, 'info', 5, z, [p, g], { pivot: p, dir });
-        if (pIsLeft) this.rotateLeft(p);
-        else this.rotateRight(p);
-        z = p;
-        pp = this.n(z).parent!;
-        this.snap(`Rotated ${dir} at ${pk}. Now ${this.n(z).key} is an outer child — continue with Case 3.`, 'action', 6, z, [pp, g]);
+      if (parentIsLeft && this.n(p).right === node) {
+        node = p;
+        this.snap(`Uncle BLACK and ${nk} is parent.right (Left–Right triangle) → node = node.parent (${pk}); rotateLeft(${pk}).`, 'info', J.rotL, node, [grandparent], { pivot: p, dir: 'left' });
+        this.rotateLeft(node);
+        this.snap(`rotateLeft(${pk}) done — now a straight line. Continue to Case 3.`, 'action', J.rotL, node, [this.n(node).parent!, grandparent]);
+      } else if (!parentIsLeft && this.n(p).left === node) {
+        node = p;
+        this.snap(`Uncle BLACK and ${nk} is parent.left (Right–Left triangle) → node = node.parent (${pk}); rotateRight(${pk}).`, 'info', J.rotR, node, [grandparent], { pivot: p, dir: 'right' });
+        this.rotateRight(node);
+        this.snap(`rotateRight(${pk}) done — now a straight line. Continue to Case 3.`, 'action', J.rotR, node, [this.n(node).parent!, grandparent]);
       }
-      const dir = pIsLeft ? 'right' : 'left';
-      this.snap(
-        `Case 3: recolor ${this.n(pp).key} BLACK and grandparent ${gk} RED, then rotate ${dir} at ${gk}.`,
-        'info',
-        7,
-        z,
-        [pp, g],
-        { pivot: g, dir },
-      );
-      this.n(pp).color = 'B';
-      this.n(g).color = 'R';
+      const top = this.n(node).parent!;
+      this.n(top).color = 'B';
+      this.n(grandparent).color = 'R';
       this.recolors += 2;
-      if (pIsLeft) this.rotateRight(g);
-      else this.rotateLeft(g);
-      this.snap(`Rotated ${dir} at ${gk}. ${this.n(pp).key} is now the subtree root; violation fixed.`, 'action', 8, pp, [z, g]);
+      this.snap(`Case 3: node.parent (${this.n(top).key}) = BLACK, grandparent (${gk}) = RED.`, 'action', J.case3, node, [top, grandparent]);
+      const dir = parentIsLeft ? 'right' : 'left';
+      this.snap(`rotate${parentIsLeft ? 'Right' : 'Left'}(grandparent ${gk}).`, 'info', parentIsLeft ? J.case3R : J.case3L, node, [top, grandparent], { pivot: grandparent, dir });
+      if (parentIsLeft) this.rotateRight(grandparent);
+      else this.rotateLeft(grandparent);
+      this.snap(`${this.n(top).key} is now the top of this subtree.`, 'action', parentIsLeft ? J.case3R : J.case3L, node, [top, grandparent]);
     }
     const r = this.root!;
-    if (this.n(r).color === 'R') {
-      this.n(r).color = 'B';
-      this.recolors++;
-      this.snap(`Root ${this.n(r).key} is RED → recolor it BLACK.`, 'action', 9, r);
-    }
+    const wasRed = this.n(r).color === 'R';
+    this.n(r).color = 'B';
+    if (wasRed) this.recolors++;
+    this.snap(`root.color = BLACK (root ${this.n(r).key} ${wasRed ? 'was RED → now BLACK' : 'is already BLACK'}).`, wasRed ? 'action' : 'compare', J.rootEnd, r);
     this.snap(`${this.inserting} inserted. All red-black properties hold.`, 'success', undefined, null);
     this.inserting = null;
   }
 }
 
+/** heightEdges() from the notes: −1 for an empty tree, otherwise edges on the longest root-to-leaf path. */
 export function rbHeight(nodes: Record<number, RBNode>, id: number | null): number {
-  if (id === null) return 0;
+  if (id === null) return -1;
   return 1 + Math.max(rbHeight(nodes, nodes[id].left), rbHeight(nodes, nodes[id].right));
 }
 
@@ -270,7 +299,7 @@ export function runRedBlackTree(keys: number[]): Trace<RBState, RBResult> {
     keyStart,
   };
   e.snap(
-    `Done. ${size} node${size === 1 ? '' : 's'}, height ${result.height}, black-height ${result.blackHeight}, ${e.rotations} rotation${e.rotations === 1 ? '' : 's'}.`,
+    `Done. ${size} node${size === 1 ? '' : 's'}, height ${result.height} edges, black-height ${result.blackHeight}, ${e.rotations} rotation${e.rotations === 1 ? '' : 's'}.`,
     'done',
     undefined,
   );

@@ -23,18 +23,21 @@ Interactive, step-by-step visualisations of six classic algorithms. Every animat
 
 | Algorithm | What you see | Complexity |
 |---|---|---|
-| **Red-Black Tree** | BST descent, red leaf insertion, red-red violations, Case 1 recolouring, Case 2/3 rotations, root recolour. Insert keys one at a time or as a batch. | O(log n) per insert |
-| **Ford–Fulkerson (DFS)** | Capacity graph with flow/capacity labels, DFS stack, skipped/visited edges, backtracking, augmenting path and bottleneck, backward residual edges, min cut. Optional residual-network view. | O(E · f\*) |
-| **Edmonds–Karp (BFS)** | BFS queue, visited nodes and discovery tree, shortest augmenting paths, residual updates, max flow and min cut. | O(V · E²) |
+| **Red-Black Tree** | Follows `insert()` / `insertFixup()` from the notes: BST descent, a BLACK root on an empty tree, red-red checks, Case 1 recolour-and-climb, triangle rotation at the parent, Case 3 rotation at the grandparent, `root.color = BLACK`. Height is `heightEdges()`. | O(log n) per insert |
+| **Ford–Fulkerson (DFS)** | Recursive `dfs()` over the `residualGraph[u][v]` matrix, scanning `v = 0 … V−1`; `parent[]`, bottleneck `pathFlow`, forward −f / reverse +f updates, live residual matrix, min cut. | O(E · f\*) |
+| **Edmonds–Karp (BFS)** | `bfs()` with a queue on the same residual matrix: stops as soon as the sink is discovered, so every path is a shortest path. | O(V · E²) |
 | **N-Queens** | Configurable board (1–12), safety checks with the attacking queen and line of attack, placement and backtracking; first solution or all solutions (n ≤ 8). | O(n!) |
-| **Disjoint Set Union** | Forest view plus parent and rank/size arrays; find paths, path compression, union by rank **or** size, live component count. | O(α(n)) amortised |
-| **Bucket Sort** | User numbers (negatives and decimals OK), configurable bucket count, distribution with the index formula, insertion sort inside each bucket, collection into the output. | O(n + k) avg · O(n²) worst |
+| **DSU · Kruskal's MST** | `Collections.sort(edges)`, then `dsu.union(src, dest)` for each edge: recursive `find()` with path compression, union by rank, cycle rejection, stop at V−1 edges. Graph, sorted edge list, DSU forest, `parent[]` and `rank[]`. | O(E log E) |
+| **Bucket Sort** | As in the notes: 10 buckets, `bucketIndex = floor(value × 10)`, insertion sort inside each bucket, then concatenate. An "Any range" mode handles negatives and larger numbers. | O(n + k) avg · O(n²) worst |
+
+The code panel under each visualisation shows the Java from the course notes, with the line that is running highlighted.
 
 ### Correctness notes
 
 - Engines in `src/engine/` are **pure functions** with no React imports. They return `{ steps, result }`, and each step holds a full state snapshot, so Previous/Next and scrubbing are always consistent.
-- Max flow uses a proper **residual network**: original edge *i* has a forward residual edge `2i` (cap − flow) and a backward one `2i+1` (flow). Ford–Fulkerson searches it with recursive **DFS**; Edmonds–Karp uses a **BFS queue** with parent pointers.
-- `npm test` checks the engines against independent oracles: red-black invariants after every insertion (60 random trials), flow conservation and capacity limits, **max-flow = min-cut** and DFS/BFS agreement on 80 random networks, non-decreasing path lengths for Edmonds–Karp, known N-Queens counts (1, 0, 0, 2, 10, 4, 40, 92), DSU against a naive connectivity model for all four strategy combinations, and Bucket Sort against `Array.sort`.
+- Max flow uses the same **residual matrix** as the Java (`residualGraph[u][v] −= f`, `residualGraph[v][u] += f`). Ford–Fulkerson searches it with recursive **DFS**; Edmonds–Karp uses a **BFS queue**. Both rebuild the path from `parent[]`.
+- The engines were checked against the original Java programs on 611 inputs (CLRS graph, Kruskal demo, RB demo keys and hundreds of random cases): identical augmenting-flow sequences, identical red-black trees (keys + colours), identical MSTs and final `parent[]`/`rank[]`.
+- `npm test` checks the engines against independent oracles: red-black invariants after every insertion (60 random trials), flow conservation and capacity limits, **max-flow = min-cut** and DFS/BFS agreement on 80 random networks, non-decreasing path lengths for Edmonds–Karp, known N-Queens counts (1, 0, 0, 2, 10, 4, 40, 92), Kruskal against an independent Prim’s check on 40 random graphs, and Bucket Sort against the worked example in the notes.
 
 ## Project structure
 
@@ -42,8 +45,8 @@ Interactive, step-by-step visualisations of six classic algorithms. Every animat
 src/
   config.ts              # App name, app ID and project identity (placeholders, env-overridable)
   algorithms.ts          # Card metadata for the six algorithms
-  engine/                # Pure algorithm engines + tests (no UI code)
-    redBlackTree.ts  maxFlow.ts  nQueens.ts  dsu.ts  bucketSort.ts  types.ts
+  engine/                # Pure algorithm engines + tests (no UI code); javaSource.ts holds the Java shown in the code panel
+    redBlackTree.ts  maxFlow.ts  nQueens.ts  kruskal.ts  bucketSort.ts  javaSource.ts  types.ts
     engine.test.ts
   hooks/
     usePlayer.ts         # Trace playback (play/pause/step/seek/speed)

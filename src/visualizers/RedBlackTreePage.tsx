@@ -1,12 +1,13 @@
 import { useMemo, useState } from 'react';
 import { findAlgo } from '../algorithms';
 import { AlgoShell } from '../components/AlgoShell';
-import { RB_PSEUDOCODE, runRedBlackTree, type RBState } from '../engine/redBlackTree';
+import { RB_CODE, runRedBlackTree, type RBState } from '../engine/redBlackTree';
 import { parseNumberList, randInt, rng } from '../engine/types';
 import { usePlayer } from '../hooks/usePlayer';
 import { useTweenedPoints, type Points } from '../hooks/useTween';
 
-const DEFAULT = '41 38 31 12 19 8 45 50';
+// Same keys as main() in the Java notes.
+const DEFAULT = '10 5 15 12 3 7 18 1 6';
 
 export default function RedBlackTreePage() {
   const meta = findAlgo('red-black-tree')!;
@@ -62,7 +63,7 @@ export default function RedBlackTreePage() {
       onRandomize={randomize}
       steps={trace.steps}
       player={player}
-      pseudocode={RB_PSEUDOCODE}
+      code={RB_CODE}
       inputs={
         <>
           <label className="field">
@@ -115,7 +116,7 @@ export default function RedBlackTreePage() {
             <b>{r.size}</b>
           </li>
           <li>
-            <span>Height</span>
+            <span>Height (edges)</span>
             <b>{r.height}</b>
           </li>
           <li>

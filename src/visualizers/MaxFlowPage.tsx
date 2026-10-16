@@ -2,15 +2,13 @@ import { useMemo, useState } from 'react';
 import { findAlgo } from '../algorithms';
 import { AlgoShell } from '../components/AlgoShell';
 import {
-  EK_PSEUDOCODE,
-  FF_PSEUDOCODE,
+  edgeFlow,
+  EK_CODE,
+  FF_CODE,
   layoutNetwork,
   networkToText,
   parseNetwork,
   randomNetwork,
-  residualFrom,
-  residualOf,
-  residualTo,
   runMaxFlow,
   SAMPLE_NETWORK,
   type FlowMethod,
@@ -26,12 +24,12 @@ const R = 21;
 export default function MaxFlowPage({ method }: { method: FlowMethod }) {
   const meta = findAlgo(method === 'dfs' ? 'ford-fulkerson' : 'edmonds-karp')!;
   const [text, setText] = useState(SAMPLE_NETWORK);
-  const [src, setSrc] = useState('S');
-  const [sink, setSink] = useState('T');
+  const [src, setSrc] = useState('0');
+  const [sink, setSink] = useState('5');
   const [error, setError] = useState<string | null>(null);
-  const [showResidual, setShowResidual] = useState(false);
+  const [view, setView] = useState<'flow' | 'residual'>('flow');
   const [input, setInput] = useState<{ net: FlowNetwork; autoplay: boolean }>(() => {
-    const p = parseNetwork(SAMPLE_NETWORK, 'S', 'T');
+    const p = parseNetwork(SAMPLE_NETWORK, '0', '5');
     if (!p.ok) throw new Error(p.error);
     return { net: p.value, autoplay: false };
   });
@@ -50,14 +48,15 @@ export default function MaxFlowPage({ method }: { method: FlowMethod }) {
     const n = randomNetwork();
     const t = networkToText(n);
     setText(t);
-    setSrc('S');
-    setSink('T');
-    run(t, 'S', 'T');
+    setSrc(n.names[n.source]);
+    setSink(n.names[n.sink]);
+    run(t, n.names[n.source], n.names[n.sink]);
   };
 
   const step = trace.steps[player.index];
   const r = trace.result;
   const isDfs = method === 'dfs';
+  const name = (v: number) => net.names[v];
 
   return (
     <AlgoShell
@@ -67,14 +66,14 @@ export default function MaxFlowPage({ method }: { method: FlowMethod }) {
       onRandomize={randomize}
       steps={trace.steps}
       player={player}
-      pseudocode={isDfs ? FF_PSEUDOCODE : EK_PSEUDOCODE}
-      note={trace.truncated ? 'Large run: some search steps were condensed. Every augmentation is still shown.' : null}
+      code={isDfs ? FF_CODE : EK_CODE}
+      note={trace.truncated ? 'Large run: some neighbour checks were condensed. Every augmenting path is still shown.' : null}
       inputs={
         <>
           <label className="field">
-            <span>Edges — one per line: FROM TO CAPACITY</span>
+            <span>Graph — edges "u v capacity", or the int[][] matrix</span>
             <textarea rows={8} value={text} onChange={(e) => setText(e.target.value)} spellCheck={false} className="mono" />
-            <small>Up to 12 nodes and 30 edges. Capacities 1–999.</small>
+            <small>Nodes 0…V−1 are scanned in index order, like the Java for-loop. Up to 12 nodes, capacities 1–999.</small>
           </label>
           <div className="field-row">
             <label className="field">
@@ -86,32 +85,36 @@ export default function MaxFlowPage({ method }: { method: FlowMethod }) {
               <input value={sink} onChange={(e) => setSink(e.target.value)} maxLength={4} />
             </label>
           </div>
-          <label className="check">
-            <input type="checkbox" checked={showResidual} onChange={(e) => setShowResidual(e.target.checked)} />
-            <span>Show residual network</span>
-          </label>
+          <div className="seg" role="radiogroup" aria-label="Graph view">
+            <button type="button" className={view === 'flow' ? 'on' : ''} onClick={() => setView('flow')} aria-pressed={view === 'flow'}>
+              Flow / capacity
+            </button>
+            <button type="button" className={view === 'residual' ? 'on' : ''} onClick={() => setView('residual')} aria-pressed={view === 'residual'}>
+              Residual graph
+            </button>
+          </div>
         </>
       }
       legend={
         <>
           <span className="lg">
-            <i className="bar teal" /> Edge carrying flow (flow / capacity)
+            <i className="bar teal" /> Edge carrying flow
           </span>
           <span className="lg">
-            <i className="bar magenta" /> Augmenting path
+            <i className="bar magenta" /> Augmenting path (from parent[])
           </span>
           <span className="lg">
-            <i className="bar dashed" /> Backward residual edge (cancels flow)
+            <i className="bar dashed" /> Reverse residual edge (cancels flow)
           </span>
           <span className="lg">
-            <i className="dot fill-teal" /> Visited in this {isDfs ? 'DFS' : 'BFS'}
+            <i className="dot fill-teal" /> visited[v] = true
           </span>
           <span className="lg">
-            <i className="dot fill-magenta" /> Source side of min cut
+            <i className="dot fill-magenta" /> Source side of the min cut
           </span>
         </>
       }
-      canvas={step && <FlowCanvas net={net} pos={pos} state={step.state} method={method} residual={showResidual} />}
+      canvas={step && <FlowCanvas net={net} pos={pos} state={step.state} method={method} view={view} />}
       result={
         <ul className="kv">
           <li className="hero">
@@ -127,19 +130,19 @@ export default function MaxFlowPage({ method }: { method: FlowMethod }) {
             <b>{r.cutCapacity}</b>
           </li>
           <li className="wide">
-            <span>Min cut (source side)</span>
-            <b className="mono">{'{' + r.minCut.map((v) => net.names[v]).join(', ') + '}'}</b>
-          </li>
-          <li className="wide">
-            <span>Paths</span>
+            <span>Java output</span>
             <b className="mono small">
               {r.augmentations.map((a, i) => (
                 <span key={i} className="path-line">
-                  {[net.source, ...a.path.map((rid) => residualTo(net, rid))].map((v) => net.names[v]).join('→')} <em>+{a.bottleneck}</em>
+                  Augmenting flow = {a.flow} <em>({a.path.map(name).join('→')})</em>
                 </span>
               ))}
-              {!r.augmentations.length && '—'}
+              <span className="path-line">Maximum Flow = {r.maxFlow}</span>
             </b>
+          </li>
+          <li className="wide">
+            <span>Min cut (source side)</span>
+            <b className="mono">{'{' + r.minCut.map(name).join(', ') + '}'}</b>
           </li>
         </ul>
       }
@@ -147,14 +150,14 @@ export default function MaxFlowPage({ method }: { method: FlowMethod }) {
         isDfs
           ? [
               { label: 'Time', value: 'O(E · f*)  (f* = max flow)' },
-              { label: 'One DFS', value: 'O(V + E)' },
-              { label: 'Space', value: 'O(V + E)' },
-              { label: 'Note', value: 'Path choice is arbitrary; can be slow on large capacities' },
+              { label: 'One DFS (matrix)', value: 'O(V²)' },
+              { label: 'Space', value: 'O(V²) residual matrix' },
+              { label: 'Note', value: 'DFS takes any path — can need many iterations' },
             ]
           : [
               { label: 'Time', value: 'O(V · E²)' },
-              { label: 'One BFS', value: 'O(V + E)' },
-              { label: 'Space', value: 'O(V + E)' },
+              { label: 'One BFS (matrix)', value: 'O(V²)' },
+              { label: 'Space', value: 'O(V²) residual matrix' },
               { label: 'Note', value: 'Shortest paths bound augmentations to O(V·E)' },
             ]
       }
@@ -167,7 +170,7 @@ interface CanvasProps {
   pos: { x: number; y: number }[];
   state: FlowState;
   method: FlowMethod;
-  residual: boolean;
+  view: 'flow' | 'residual';
 }
 
 function curve(a: { x: number; y: number }, b: { x: number; y: number }, bend: number) {
@@ -189,15 +192,86 @@ function curve(a: { x: number; y: number }, b: { x: number; y: number }, bend: n
   return { d: `M${s.x},${s.y} Q${c.x},${c.y} ${e.x},${e.y}`, label };
 }
 
-function FlowCanvas({ net, pos, state, method, residual }: CanvasProps) {
+function FlowCanvas({ net, pos, state, method, view }: CanvasProps) {
+  const V = net.names.length;
   const visited = new Set(state.visited);
-  const pathSet = new Set(state.path.map((rid) => rid >> 1));
-  const treeSet = new Set(state.tree);
   const cut = state.minCut ? new Set(state.minCut) : null;
-  const pairs = new Set(net.edges.map((e) => `${e.from}-${e.to}`));
-  const activeEdge = state.active !== null ? state.active >> 1 : null;
+  const onPath = (u: number, v: number) => {
+    const i = state.path.indexOf(u);
+    return i >= 0 && state.path[i + 1] === v;
+  };
+  const isPathEdge = (u: number, v: number) => state.pathEdge?.u === u && state.pathEdge?.v === v;
+  const chk = state.check;
+  const name = (v: number) => net.names[v];
 
-  const nodeName = (v: number) => net.names[v];
+  // A residual move u→v along a pair that has no original u→v edge cancels flow on v→u.
+  const reverseMove = (u: number, v: number) => net.cap[u][v] === 0 && net.cap[v][u] > 0;
+
+  const flowEdges = net.edges.map((e, i) => {
+    const { from: u, to: v, cap } = e;
+    const bend = net.cap[v][u] > 0 ? 48 : 0; // antiparallel pair: separate the two labels
+    const g = curve(pos[u], pos[v], bend);
+    const f = edgeFlow(net, state.residual, u, v);
+    const hot = onPath(u, v);
+    const checking = chk && chk.u === u && chk.v === v;
+    let cls = 'f-edge';
+    if (f > 0) cls += ' has-flow';
+    if (f === cap) cls += ' saturated';
+    if (hot) cls += ' on-path';
+    if (checking) cls += chk!.ok ? ' active-ok' : ' active-skip';
+    if (isPathEdge(u, v)) cls += ' active-ok';
+    const marker = hot ? 'magenta' : f > 0 || checking ? 'teal' : 'muted';
+    return (
+      <g key={`f${i}`}>
+        <path d={g.d} className={cls} style={{ strokeWidth: hot ? 4.5 : 1.5 + (f / cap) * 3.5 }} markerEnd={`url(#arrow-${marker})`} />
+        <g transform={`translate(${g.label.x} ${g.label.y})`}>
+          <rect x={-22} y={-11} width={44} height={22} rx={6} className={`edge-tag ${hot ? 'on-path' : ''} ${f === cap ? 'full' : ''}`} />
+          <text dy="0.35em" textAnchor="middle" className="edge-label">
+            {f}/{cap}
+          </text>
+        </g>
+      </g>
+    );
+  });
+
+  // Reverse residual moves (u→v where only v→u exists in the original graph) drawn as dashed overlays.
+  const reverseOverlays: JSX.Element[] = [];
+  const addReverse = (u: number, v: number, cls: string, key: string) => {
+    const g = curve(pos[u], pos[v], -30);
+    reverseOverlays.push(<path key={key} d={g.d} className={`f-edge backward ${cls}`} markerEnd={`url(#arrow-${cls.includes('on-path') ? 'magenta' : 'teal'})`} />);
+  };
+  if (chk && reverseMove(chk.u, chk.v)) addReverse(chk.u, chk.v, chk.ok ? 'active-ok' : 'active-skip', 'chk');
+  for (let i = 0; i + 1 < state.path.length; i++) {
+    const u = state.path[i];
+    const v = state.path[i + 1];
+    if (reverseMove(u, v)) addReverse(u, v, 'on-path', `p${i}`);
+  }
+
+  const residualEdges: JSX.Element[] = [];
+  if (view === 'residual')
+    for (let u = 0; u < V; u++)
+      for (let v = 0; v < V; v++) {
+        const rc = state.residual[u][v];
+        const checking = chk && chk.u === u && chk.v === v;
+        if (rc <= 0 && !checking) continue;
+        const g = curve(pos[u], pos[v], 18);
+        const hot = onPath(u, v);
+        let cls = 'f-edge residual';
+        if (reverseMove(u, v)) cls += ' backward';
+        if (hot) cls += ' on-path';
+        if (checking) cls += chk!.ok ? ' active-ok' : ' active-skip';
+        residualEdges.push(
+          <g key={`r${u}-${v}`}>
+            <path d={g.d} className={cls} markerEnd={`url(#arrow-${hot ? 'magenta' : checking && chk!.ok ? 'teal' : 'muted'})`} />
+            <g transform={`translate(${g.label.x} ${g.label.y})`}>
+              <rect x={-14} y={-10} width={28} height={20} rx={6} className={`edge-tag ${hot ? 'on-path' : ''}`} />
+              <text dy="0.35em" textAnchor="middle" className="edge-label">
+                {rc}
+              </text>
+            </g>
+          </g>,
+        );
+      }
 
   return (
     <div className="canvas-wrap">
@@ -206,100 +280,36 @@ function FlowCanvas({ net, pos, state, method, residual }: CanvasProps) {
           Iteration <b>{state.iteration}</b>
         </span>
         <span className="canvas-badge">
-          Flow <b>{state.maxFlow}</b>
+          maxFlow <b>{state.maxFlow}</b>
         </span>
-        {state.bottleneck !== null && (
+        {state.pathFlow !== null && (
           <span className="canvas-badge magenta">
-            Bottleneck <b>{state.bottleneck}</b>
+            pathFlow <b>{state.pathFlow}</b>
           </span>
         )}
       </div>
       <svg viewBox={`0 0 ${W} ${H}`} className="svg-canvas" role="img" aria-label="Flow network">
         <defs>
-          {['muted', 'teal', 'magenta', 'warn'].map((k) => (
+          {['muted', 'teal', 'magenta'].map((k) => (
             <marker key={k} id={`arrow-${k}`} viewBox="0 0 10 10" refX="8" refY="5" markerWidth="11" markerHeight="11" markerUnits="userSpaceOnUse" orient="auto-start-reverse">
               <path d="M0,0 L10,5 L0,10 z" className={`arrowhead ${k}`} />
             </marker>
           ))}
         </defs>
-
-        {!residual &&
-          net.edges.map((e, i) => {
-            const bend = pairs.has(`${e.to}-${e.from}`) ? 22 : 0;
-            const g = curve(pos[e.from], pos[e.to], bend);
-            const f = state.flows[i];
-            const onPath = pathSet.has(i);
-            const isActive = activeEdge === i;
-            const backward = isActive && state.active! & 1;
-            let cls = 'f-edge';
-            if (f > 0) cls += ' has-flow';
-            if (f === e.cap) cls += ' saturated';
-            if (onPath) cls += ' on-path';
-            if (isActive && !backward) cls += state.activeOk ? ' active-ok' : ' active-skip';
-            const marker = onPath ? 'magenta' : isActive && state.activeOk && !backward ? 'teal' : f > 0 ? 'teal' : 'muted';
-            const width = 1.5 + (f / Math.max(1, e.cap)) * 3.5;
-            return (
-              <g key={i}>
-                <path d={g.d} className={cls} style={{ strokeWidth: onPath ? 4.5 : width }} markerEnd={`url(#arrow-${marker})`} />
-                {backward && (
-                  <path
-                    d={curve(pos[e.to], pos[e.from], -bend - 16).d}
-                    className={`f-edge backward ${state.activeOk ? 'active-ok' : 'active-skip'}`}
-                    markerEnd={`url(#arrow-${state.activeOk ? 'magenta' : 'muted'})`}
-                  />
-                )}
-                <g transform={`translate(${g.label.x} ${g.label.y})`}>
-                  <rect x={-22} y={-11} width={44} height={22} rx={6} className={`edge-tag ${onPath ? 'on-path' : ''} ${f === e.cap ? 'full' : ''}`} />
-                  <text dy="0.35em" textAnchor="middle" className="edge-label">
-                    {f}/{e.cap}
-                  </text>
-                </g>
-              </g>
-            );
-          })}
-
-        {residual &&
-          net.edges.flatMap((_, i) =>
-            [2 * i, 2 * i + 1].map((rid) => {
-              const rc = residualOf(net, state.flows, rid);
-              const isActive = state.active === rid;
-              const inPath = state.path.includes(rid);
-              if (rc <= 0 && !isActive) return null;
-              const a = pos[residualFrom(net, rid)];
-              const b = pos[residualTo(net, rid)];
-              const g = curve(a, b, 18);
-              let cls = 'f-edge residual';
-              if (rid & 1) cls += ' backward';
-              if (treeSet.has(rid)) cls += ' has-flow';
-              if (inPath) cls += ' on-path';
-              if (isActive) cls += state.activeOk ? ' active-ok' : ' active-skip';
-              return (
-                <g key={rid}>
-                  <path d={g.d} className={cls} markerEnd={`url(#arrow-${inPath ? 'magenta' : isActive && state.activeOk ? 'teal' : 'muted'})`} />
-                  <g transform={`translate(${g.label.x} ${g.label.y})`}>
-                    <rect x={-14} y={-10} width={28} height={20} rx={6} className={`edge-tag ${inPath ? 'on-path' : ''}`} />
-                    <text dy="0.35em" textAnchor="middle" className="edge-label">
-                      {rc}
-                    </text>
-                  </g>
-                </g>
-              );
-            }),
-          )}
-
+        {view === 'flow' ? flowEdges : residualEdges}
+        {view === 'flow' && reverseOverlays}
         {pos.map((p, v) => {
           const isS = v === net.source;
           const isT = v === net.sink;
           let cls = 'f-node';
           if (cut ? cut.has(v) : visited.has(v)) cls += cut ? ' cut' : ' visited';
-          if (state.current === v) cls += ' current';
           return (
             <g key={v} transform={`translate(${p.x} ${p.y})`} className={cls}>
               {state.current === v && <circle r={R + 7} className="halo-teal" />}
               <circle r={R} className="f-node-body" />
               {(isS || isT) && <circle r={R - 4} className={`f-node-inner ${isS ? 'src' : 'snk'}`} />}
               <text dy="0.35em" textAnchor="middle" className="node-label">
-                {nodeName(v)}
+                {name(v)}
               </text>
               {(isS || isT) && (
                 <text y={R + 16} textAnchor="middle" className="node-sub">
@@ -311,19 +321,72 @@ function FlowCanvas({ net, pos, state, method, residual }: CanvasProps) {
         })}
       </svg>
       <div className="frontier">
-        <span className="frontier-label">{method === 'dfs' ? 'DFS stack (path)' : 'BFS queue'}</span>
+        <span className="frontier-label">{method === 'dfs' ? 'dfs() call stack' : 'queue'}</span>
         <div className="chips">
           {state.frontier.length ? (
             state.frontier.map((v, i) => (
-              <span key={`${v}-${i}`} className={`chip ${state.current === v && method === 'dfs' && i === state.frontier.length - 1 ? 'on' : ''}`}>
-                {nodeName(v)}
+              <span key={`${v}-${i}`} className={`chip ${state.current === v ? 'on' : ''}`}>
+                {name(v)}
               </span>
             ))
           ) : (
             <span className="muted small">empty</span>
           )}
         </div>
+        <span className="frontier-label" style={{ marginLeft: 'auto' }}>
+          parent[]
+        </span>
+        <div className="chips">
+          {state.parent.map((p, v) => (
+            <span key={v} className="chip small-chip" title={`parent[${name(v)}]`}>
+              {name(v)}:{p < 0 ? '−1' : name(p)}
+            </span>
+          ))}
+        </div>
       </div>
+      <ResidualMatrix net={net} state={state} />
     </div>
+  );
+}
+
+function ResidualMatrix({ net, state }: { net: FlowNetwork; state: FlowState }) {
+  const V = net.names.length;
+  const chk = state.check;
+  const pe = state.pathEdge;
+  return (
+    <details className="matrix-wrap" open={V <= 8}>
+      <summary>residualGraph[u][v]</summary>
+      <div className="matrix-scroll">
+        <table className="matrix">
+          <thead>
+            <tr>
+              <th>u \ v</th>
+              {net.names.map((n) => (
+                <th key={n} className={chk && net.names[chk.v] === n ? 'hl' : ''}>
+                  {n}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {state.residual.map((row, u) => (
+              <tr key={u} className={chk?.u === u ? 'row-hl' : ''}>
+                <th>{net.names[u]}</th>
+                {row.map((val, v) => {
+                  const isChk = chk && chk.u === u && chk.v === v;
+                  const isPE = pe && ((pe.u === u && pe.v === v) || (pe.u === v && pe.v === u));
+                  const changed = val !== net.cap[u][v];
+                  return (
+                    <td key={v} className={`${isChk ? (chk!.ok ? 'chk-ok' : 'chk-no') : ''} ${isPE ? 'pe' : ''} ${val === 0 ? 'zero' : ''} ${changed ? 'changed' : ''}`}>
+                      {val}
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </details>
   );
 }

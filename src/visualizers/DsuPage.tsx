@@ -1,46 +1,43 @@
 import { useMemo, useState } from 'react';
 import { findAlgo } from '../algorithms';
 import { AlgoShell } from '../components/AlgoShell';
-import { DSU_PSEUDOCODE, opText, parseDsuOps, randomDsuOps, runDsu, SAMPLE_DSU, type DsuOp, type DsuState, type UnionStrategy } from '../engine/dsu';
+import { edgeText, KRUSKAL_CODE, parseEdges, randomGraph, runKruskal, SAMPLE_EDGES, type KEdge, type KruskalState } from '../engine/kruskal';
 import { usePlayer } from '../hooks/usePlayer';
 import { useTweenedPoints, type Points } from '../hooks/useTween';
 
-interface DsuInput {
-  n: number;
-  ops: DsuOp[];
-  strategy: UnionStrategy;
-  compression: boolean;
+interface KInput {
+  vertices: number;
+  edges: KEdge[];
   autoplay: boolean;
 }
 
+const STATUS_LABEL = { pending: 'waiting', current: 'checking', mst: 'in MST', cycle: 'cycle — skipped', unused: 'not needed' } as const;
+
 export default function DsuPage() {
   const meta = findAlgo('disjoint-set-union')!;
-  const [nText, setNText] = useState('10');
-  const [text, setText] = useState(SAMPLE_DSU);
-  const [strategy, setStrategy] = useState<UnionStrategy>('rank');
-  const [compression, setCompression] = useState(true);
+  const [vText, setVText] = useState('5');
+  const [text, setText] = useState(SAMPLE_EDGES);
   const [error, setError] = useState<string | null>(null);
-  const [input, setInput] = useState<DsuInput>(() => {
-    const p = parseDsuOps(SAMPLE_DSU, 10);
-    return { n: 10, ops: p.ok ? p.value : [], strategy: 'rank', compression: true, autoplay: false };
+  const [input, setInput] = useState<KInput>(() => {
+    const p = parseEdges(SAMPLE_EDGES, 5);
+    return { vertices: 5, edges: p.ok ? p.value : [], autoplay: false };
   });
-  const trace = useMemo(() => runDsu(input.n, input.ops, input.strategy, input.compression), [input]);
+  const trace = useMemo(() => runKruskal(input.vertices, input.edges), [input]);
   const player = usePlayer(trace.steps.length, trace, input);
 
-  const run = (nt = nText, t = text, s = strategy, c = compression) => {
-    const n = Number(nt);
-    if (!Number.isInteger(n) || n < 2 || n > 16) return setError('Number of elements must be a whole number from 2 to 16.');
-    const p = parseDsuOps(t, n);
+  const run = (vt = vText, t = text) => {
+    const V = Number(vt);
+    if (!Number.isInteger(V) || V < 2 || V > 12) return setError('Number of vertices must be a whole number from 2 to 12.');
+    const p = parseEdges(t, V);
     if (!p.ok) return setError(p.error);
     setError(null);
-    setInput({ n, ops: p.value, strategy: s, compression: c, autoplay: true });
+    setInput({ vertices: V, edges: p.value, autoplay: true });
   };
   const randomize = () => {
-    const n = 8 + Math.floor(Math.random() * 7);
-    const t = randomDsuOps(n);
-    setNText(String(n));
-    setText(t);
-    run(String(n), t);
+    const g = randomGraph();
+    setVText(String(g.vertices));
+    setText(g.text);
+    run(String(g.vertices), g.text);
   };
 
   const step = trace.steps[player.index];
@@ -54,91 +51,164 @@ export default function DsuPage() {
       onRandomize={randomize}
       steps={trace.steps}
       player={player}
-      pseudocode={DSU_PSEUDOCODE}
+      code={KRUSKAL_CODE}
       inputs={
         <>
           <label className="field">
-            <span>Elements (0 … n−1)</span>
-            <input type="number" min={2} max={16} value={nText} onChange={(e) => setNText(e.target.value)} />
+            <span>Vertices (0 … V−1)</span>
+            <input type="number" min={2} max={12} value={vText} onChange={(e) => setVText(e.target.value)} />
           </label>
           <label className="field">
-            <span>Operations — one per line</span>
+            <span>Edges — one per line: src dest weight</span>
             <textarea rows={8} value={text} onChange={(e) => setText(e.target.value)} spellCheck={false} className="mono" />
-            <small>union a b · find a · connected a b (max 40)</small>
-          </label>
-          <div className="seg" role="radiogroup" aria-label="Union strategy">
-            <button type="button" className={strategy === 'rank' ? 'on' : ''} onClick={() => setStrategy('rank')} aria-pressed={strategy === 'rank'}>
-              Union by rank
-            </button>
-            <button type="button" className={strategy === 'size' ? 'on' : ''} onClick={() => setStrategy('size')} aria-pressed={strategy === 'size'}>
-              Union by size
-            </button>
-          </div>
-          <label className="check">
-            <input type="checkbox" checked={compression} onChange={(e) => setCompression(e.target.checked)} />
-            <span>Path compression</span>
+            <small>Undirected, up to 30 edges. You can also paste lines like edges.add(new Edge(0, 1, 2));</small>
           </label>
         </>
       }
       legend={
         <>
           <span className="lg">
-            <i className="dot fill-teal" /> On the find path
+            <i className="bar teal" /> Edge in the MST
           </span>
           <span className="lg">
-            <i className="dot ring-magenta" /> Root being united
+            <i className="bar magenta" /> Edge being checked
           </span>
           <span className="lg">
-            <i className="bar magenta" /> Pointer just changed
+            <i className="bar dashed" /> Rejected — would form a cycle
+          </span>
+          <span className="lg">
+            <i className="dot fill-teal" /> On the find() call chain
+          </span>
+          <span className="lg">
+            <i className="dot ring-magenta" /> rootX / rootY
           </span>
         </>
       }
-      canvas={step && <DsuCanvas state={step.state} ops={input.ops} strategy={input.strategy} ms={player.stepMs} />}
+      canvas={step && <KruskalCanvas state={step.state} vertices={input.vertices} sorted={r.sorted} ms={player.stepMs} />}
       result={
         <ul className="kv">
           <li className="hero">
+            <span>Total MST weight</span>
+            <b>{r.totalWeight}</b>
+          </li>
+          <li>
+            <span>MST edges</span>
+            <b>
+              {r.mst.length} / {input.vertices - 1}
+            </b>
+          </li>
+          <li>
             <span>Components</span>
             <b>{r.components}</b>
           </li>
-          <li>
-            <span>Pointer hops</span>
-            <b>{r.pointerHops}</b>
-          </li>
           <li className="wide">
-            <span>Sets</span>
-            <b className="mono small">{r.sets.map((s) => `{${s.join(',')}}`).join('  ')}</b>
-          </li>
-          <li className="wide">
-            <span>Answers</span>
+            <span>Java output</span>
             <b className="mono small">
-              {r.answers.map((a, i) => (
-                <span key={i} className="path-line">
-                  {a}
+              <span className="path-line">Edges in MST:</span>
+              {r.mst.map((e) => (
+                <span key={e.id} className="path-line">
+                  {edgeText(e)}
                 </span>
               ))}
+              <span className="path-line">Total MST Weight = {r.totalWeight}</span>
             </b>
           </li>
         </ul>
       }
       complexity={[
-        { label: 'Find / Union', value: 'O(α(n)) amortised with both optimisations' },
-        { label: 'Rank/size only', value: 'O(log n)' },
-        { label: 'Neither', value: 'O(n) worst case' },
-        { label: 'Space', value: 'O(n)' },
+        { label: 'Sort edges', value: 'O(E log E)' },
+        { label: 'E × find/union', value: 'O(E · α(V))' },
+        { label: 'Total', value: 'O(E log E)' },
+        { label: 'Space', value: 'O(V + E)' },
       ]}
     />
   );
 }
 
-function DsuCanvas({ state, ops, strategy, ms }: { state: DsuState; ops: DsuOp[]; strategy: UnionStrategy; ms: number }) {
+const GW = 420;
+const GH = 300;
+
+function KruskalCanvas({ state, vertices, sorted, ms }: { state: KruskalState; vertices: number; sorted: KEdge[]; ms: number }) {
+  const gpos = useMemo(
+    () =>
+      Array.from({ length: vertices }, (_, i) => {
+        const a = -Math.PI / 2 + (i / vertices) * Math.PI * 2;
+        return { x: GW / 2 + Math.cos(a) * 118, y: GH / 2 + Math.sin(a) * 118 };
+      }),
+    [vertices],
+  );
+  const cur = state.edgeIndex !== null ? sorted[state.edgeIndex] : null;
+  const roots = new Set(state.roots);
+  const chain = new Set(state.findPath);
+
+  return (
+    <div className="canvas-wrap">
+      <div className="canvas-badges">
+        <span className="canvas-badge">
+          MST edges <b>{state.mstCount}</b> / {vertices - 1}
+        </span>
+        <span className="canvas-badge">
+          totalWeight <b>{state.totalWeight}</b>
+        </span>
+        {cur && (
+          <span className="canvas-badge magenta">
+            edge <b>{edgeText(cur)}</b>
+          </span>
+        )}
+      </div>
+      <div className="kruskal-top">
+        <svg viewBox={`0 0 ${GW} ${GH}`} className="svg-canvas kruskal-graph" role="img" aria-label="Weighted graph">
+          {sorted.map((e, i) => {
+            const a = gpos[e.src];
+            const b = gpos[e.dest];
+            const st = state.status[i];
+            const mx = (a.x + b.x) / 2;
+            const my = (a.y + b.y) / 2;
+            return (
+              <g key={e.id}>
+                <line x1={a.x} y1={a.y} x2={b.x} y2={b.y} className={`k-edge ${st}`} />
+                <g transform={`translate(${mx} ${my})`}>
+                  <rect x={-14} y={-10} width={28} height={20} rx={6} className={`edge-tag k-tag ${st}`} />
+                  <text dy="0.35em" textAnchor="middle" className="edge-label">
+                    {e.weight}
+                  </text>
+                </g>
+              </g>
+            );
+          })}
+          {gpos.map((p, v) => (
+            <g key={v} transform={`translate(${p.x} ${p.y})`}>
+              {chain.has(v) && <circle r={25} className="halo-teal" />}
+              <circle r={18} className={`f-node-body ${cur && (cur.src === v || cur.dest === v) ? 'k-end' : ''}`} />
+              <text dy="0.35em" textAnchor="middle" className="node-label">
+                {v}
+              </text>
+            </g>
+          ))}
+        </svg>
+        <ol className="edge-list" aria-label="Edges sorted by weight">
+          {sorted.map((e, i) => (
+            <li key={e.id} className={`k-row ${state.status[i]}`}>
+              <span className="mono">{edgeText(e)}</span>
+              <span className="k-status">{STATUS_LABEL[state.status[i]]}</span>
+            </li>
+          ))}
+        </ol>
+      </div>
+      <Forest state={state} ms={ms} roots={roots} chain={chain} />
+    </div>
+  );
+}
+
+function Forest({ state, ms, roots, chain }: { state: KruskalState; ms: number; roots: Set<number>; chain: Set<number> }) {
   const n = state.parent.length;
   const layout = useMemo(() => {
     const children: number[][] = Array.from({ length: n }, () => []);
-    const roots: number[] = [];
-    state.parent.forEach((p, i) => (p === i ? roots.push(i) : children[p].push(i)));
+    const rs: number[] = [];
+    state.parent.forEach((p, i) => (p === i ? rs.push(i) : children[p].push(i)));
     const leaves = (v: number): number => (children[v].length ? children[v].reduce((a, c) => a + leaves(c), 0) : 1);
-    const total = roots.reduce((a, r) => a + leaves(r), 0);
-    const W = Math.max(560, total * 56);
+    const total = rs.reduce((a, r) => a + leaves(r), 0);
+    const W = Math.max(480, total * 52);
     const pos: Points = {};
     let maxD = 0;
     let cursor = 0;
@@ -153,30 +223,17 @@ function DsuCanvas({ state, ops, strategy, ms }: { state: DsuState; ops: DsuOp[]
       children[v].forEach((c) => place(c, d + 1));
       pos[v] = { x: (start + cursor) / 2, y: d };
     };
-    roots.forEach((r) => place(r, 0));
-    const H = Math.max(220, (maxD + 1) * 74 + 50);
+    rs.forEach((r) => place(r, 0));
+    const H = Math.max(150, (maxD + 1) * 66 + 40);
     const out: Points = {};
-    for (const k in pos) out[k] = { x: 20 + (pos[k].x / total) * (W - 40), y: 40 + pos[k].y * 74 };
+    for (const k in pos) out[k] = { x: 20 + (pos[k].x / total) * (W - 40), y: 34 + pos[k].y * 66 };
     return { pos: out, W, H };
   }, [state.parent, n]);
   const p = useTweenedPoints(layout.pos, Math.min(520, ms * 0.8));
-  const path = new Set(state.path);
-  const roots = new Set(state.roots);
   const changed = new Set(state.changed);
-  const op = state.opIndex >= 0 && state.opIndex < ops.length ? ops[state.opIndex] : null;
-
   return (
-    <div className="canvas-wrap">
-      <div className="canvas-badges">
-        <span className="canvas-badge">
-          Components <b>{state.components}</b>
-        </span>
-        {op && (
-          <span className="canvas-badge magenta">
-            Op {state.opIndex + 1}/{ops.length} <b>{opText(op)}</b>
-          </span>
-        )}
-      </div>
+    <div className="forest-block">
+      <div className="zone-label">DSU forest (arrows point to parent)</div>
       <svg viewBox={`0 0 ${layout.W} ${layout.H}`} className="svg-canvas" role="img" aria-label="Disjoint set forest">
         <defs>
           <marker id="dsu-arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto">
@@ -194,15 +251,14 @@ function DsuCanvas({ state, ops, strategy, ms }: { state: DsuState; ops: DsuOp[]
           const ux = (b.x - a.x) / len;
           const uy = (b.y - a.y) / len;
           const hot = changed.has(i);
-          const onPath = path.has(i) && path.has(par);
           return (
             <line
               key={`e${i}`}
-              x1={a.x + ux * 18}
-              y1={a.y + uy * 18}
-              x2={b.x - ux * 22}
-              y2={b.y - uy * 22}
-              className={`dsu-edge ${hot ? 'hot' : ''} ${onPath ? 'path' : ''}`}
+              x1={a.x + ux * 17}
+              y1={a.y + uy * 17}
+              x2={b.x - ux * 21}
+              y2={b.y - uy * 21}
+              className={`dsu-edge ${hot ? 'hot' : ''} ${chain.has(i) && chain.has(par) ? 'path' : ''}`}
               markerEnd={`url(#${hot ? 'dsu-arrow-hot' : 'dsu-arrow'})`}
             />
           );
@@ -211,10 +267,10 @@ function DsuCanvas({ state, ops, strategy, ms }: { state: DsuState; ops: DsuOp[]
           const pt = p[i];
           if (!pt) return null;
           return (
-            <g key={i} transform={`translate(${pt.x} ${pt.y})`} className={`dsu-node ${path.has(i) ? 'path' : ''} ${par === i ? 'root' : ''}`}>
-              {state.current === i && <circle r={25} className="halo-teal" />}
-              {roots.has(i) && <circle r={23} className="halo-magenta" />}
-              <circle r={17} className="dsu-body" />
+            <g key={i} transform={`translate(${pt.x} ${pt.y})`} className={`dsu-node ${chain.has(i) ? 'path' : ''} ${par === i ? 'root' : ''}`}>
+              {state.current === i && <circle r={24} className="halo-teal" />}
+              {roots.has(i) && <circle r={22} className="halo-magenta" />}
+              <circle r={16} className="dsu-body" />
               <text dy="0.35em" textAnchor="middle" className="node-label">
                 {i}
               </text>
@@ -222,11 +278,11 @@ function DsuCanvas({ state, ops, strategy, ms }: { state: DsuState; ops: DsuOp[]
           );
         })}
       </svg>
-      <div className="array-table" role="table" aria-label="Parent array">
+      <div className="array-table" role="table" aria-label="parent and rank arrays">
         <div className="arr-row head" role="row">
           <span role="rowheader">i</span>
           {state.parent.map((_, i) => (
-            <span key={i} role="cell" className={path.has(i) ? 'path' : ''}>
+            <span key={i} role="cell" className={chain.has(i) ? 'path' : ''}>
               {i}
             </span>
           ))}
@@ -240,8 +296,8 @@ function DsuCanvas({ state, ops, strategy, ms }: { state: DsuState; ops: DsuOp[]
           ))}
         </div>
         <div className="arr-row" role="row">
-          <span role="rowheader">{strategy}</span>
-          {(strategy === 'rank' ? state.rank : state.size).map((v, i) => (
+          <span role="rowheader">rank</span>
+          {state.rank.map((v, i) => (
             <span key={i} role="cell" className={state.parent[i] === i ? '' : 'dim'}>
               {v}
             </span>

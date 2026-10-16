@@ -15,7 +15,8 @@ interface Props {
   legend?: ReactNode;
   steps: Step<unknown>[];
   player: Player;
-  pseudocode: string[];
+  /** Source shown in the code panel; step.line indexes into lines. */
+  code: { title: string; lines: string[] };
   result: ReactNode;
   complexity: { label: string; value: string }[];
   note?: string | null;
@@ -129,20 +130,11 @@ export function AlgoShell(p: Props) {
           )}
           {p.note && <div className="note">{p.note}</div>}
           <Controls player={player} />
+          <CodePanel code={p.code} line={step?.line} />
           {p.legend && <div className="panel legend legend-narrow">{p.legend}</div>}
         </section>
 
         <aside className="side-col">
-          <div className="panel">
-            <h2 className="panel-title">Pseudocode</h2>
-            <ol className="pseudo">
-              {p.pseudocode.map((l, i) => (
-                <li key={i} className={step?.line === i ? 'on' : ''}>
-                  <code>{l}</code>
-                </li>
-              ))}
-            </ol>
-          </div>
           <div className="panel">
             <h2 className="panel-title">
               Result
@@ -171,6 +163,36 @@ export function AlgoShell(p: Props) {
             <StepLog steps={steps} index={player.index} onSeek={player.seek} />
           </div>
         </aside>
+      </div>
+    </div>
+  );
+}
+
+function CodePanel({ code, line }: { code: { title: string; lines: string[] }; line?: number }) {
+  const ref = useRef<HTMLDivElement>(null);
+  // Keep the active line in view by scrolling the panel only (never the page).
+  useEffect(() => {
+    const box = ref.current;
+    const el = box?.querySelector<HTMLElement>('.on');
+    if (!box || !el) return;
+    const top = el.offsetTop - box.clientHeight / 2 + el.clientHeight / 2;
+    box.scrollTo({ top: Math.max(0, top), behavior: 'smooth' });
+  }, [line]);
+  return (
+    <div className="panel code-panel">
+      <h2 className="panel-title">
+        {code.title}
+        <span className="code-hint">highlighted line = what's running now</span>
+      </h2>
+      <div className="code-box" ref={ref}>
+        <pre>
+          {code.lines.map((l, i) => (
+            <div key={i} className={`code-line ${line === i ? 'on' : ''}`}>
+              <span className="ln">{i + 1}</span>
+              <code>{l || ' '}</code>
+            </div>
+          ))}
+        </pre>
       </div>
     </div>
   );

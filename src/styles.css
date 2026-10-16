@@ -1659,6 +1659,7 @@ p + .cx-table {
   left: 0;
   right: 0;
   bottom: 0;
+  height: var(--h);
   background: linear-gradient(180deg, rgba(25, 227, 198, 0.28), rgba(25, 227, 198, 0.06));
 }
 .num-chip b {
@@ -1696,7 +1697,7 @@ p + .cx-table {
 }
 .bucket {
   flex: 1 0 auto;
-  min-width: 96px;
+  min-width: 64px;
   display: flex;
   flex-direction: column;
   border: 1px solid var(--line-2);
@@ -1878,4 +1879,269 @@ p + .cx-table {
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
+}
+
+/* ============ Code panel (Java) ============ */
+.code-panel {
+  padding-bottom: 8px;
+}
+.code-hint {
+  font-family: var(--font-body);
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 0.72rem;
+  color: var(--dim);
+}
+.code-box {
+  position: relative;
+  max-height: 360px;
+  overflow: auto;
+  background: var(--bg-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  scrollbar-width: thin;
+}
+.code-box pre {
+  margin: 0;
+  padding: 8px 0;
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  line-height: 1.6;
+  min-width: max-content;
+}
+.code-line {
+  display: flex;
+  padding-right: 16px;
+  color: var(--muted);
+  transition: background 0.2s, color 0.2s;
+}
+.code-line .ln {
+  width: 3.2em;
+  flex-shrink: 0;
+  text-align: right;
+  padding-right: 14px;
+  color: var(--dim);
+  user-select: none;
+}
+.code-line code {
+  white-space: pre;
+}
+.code-line.on {
+  background: var(--teal-soft);
+  color: var(--text);
+  box-shadow: inset 3px 0 0 var(--teal);
+}
+.code-line.on .ln {
+  color: var(--teal-2);
+}
+
+/* residual matrix */
+.small-chip {
+  font-size: 0.7rem;
+  padding: 2px 6px;
+}
+.matrix-wrap {
+  background: var(--bg-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+}
+.matrix-wrap summary {
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  color: var(--dim);
+}
+.matrix-scroll {
+  overflow-x: auto;
+  margin-top: 8px;
+}
+.matrix {
+  border-collapse: collapse;
+  font-family: var(--font-mono);
+  font-size: 0.76rem;
+}
+.matrix th,
+.matrix td {
+  min-width: 34px;
+  padding: 4px 6px;
+  text-align: center;
+  border: 1px solid var(--line);
+}
+.matrix th {
+  color: var(--dim);
+  font-weight: 500;
+}
+.matrix th.hl {
+  color: var(--teal-2);
+}
+.matrix tr.row-hl th {
+  color: var(--teal-2);
+}
+.matrix tr.row-hl td {
+  background: rgba(25, 227, 198, 0.04);
+}
+.matrix td.zero {
+  color: var(--dim);
+}
+.matrix td.changed {
+  color: var(--amber);
+}
+.matrix td.chk-ok {
+  background: var(--teal-soft);
+  color: var(--teal-2);
+  font-weight: 700;
+  outline: 2px solid var(--teal);
+}
+.matrix td.chk-no {
+  outline: 2px dashed var(--amber);
+}
+.matrix td.pe {
+  background: var(--magenta-soft);
+  color: var(--magenta-2);
+  font-weight: 700;
+}
+
+/* kruskal */
+.kruskal-top {
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
+  gap: 14px;
+  align-items: start;
+}
+.kruskal-graph {
+  max-height: 320px;
+}
+.k-edge {
+  stroke: #45425c;
+  stroke-width: 2;
+  transition: stroke 0.25s, stroke-width 0.25s, opacity 0.25s;
+}
+.k-edge.current {
+  stroke: var(--magenta);
+  stroke-width: 4;
+  filter: drop-shadow(0 0 5px rgba(255, 61, 154, 0.6));
+}
+.k-edge.mst {
+  stroke: var(--teal);
+  stroke-width: 4;
+}
+.k-edge.cycle {
+  stroke: var(--amber);
+  stroke-dasharray: 5 5;
+  opacity: 0.6;
+}
+.k-edge.unused {
+  opacity: 0.35;
+}
+.k-tag.mst {
+  stroke: var(--teal);
+}
+.k-tag.current {
+  stroke: var(--magenta);
+}
+.k-end {
+  stroke: var(--magenta) !important;
+}
+.edge-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 320px;
+  overflow-y: auto;
+}
+.k-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 5px 10px;
+  border-radius: 7px;
+  background: var(--bg-2);
+  border: 1px solid var(--line);
+  font-size: 0.8rem;
+  transition: background 0.2s, border-color 0.2s;
+}
+.k-status {
+  font-size: 0.7rem;
+  color: var(--dim);
+  white-space: nowrap;
+}
+.k-row.current {
+  border-color: var(--magenta);
+  background: var(--magenta-soft);
+}
+.k-row.current .k-status {
+  color: var(--magenta-2);
+}
+.k-row.mst .k-status {
+  color: var(--teal-2);
+}
+.k-row.mst {
+  border-color: rgba(25, 227, 198, 0.4);
+}
+.k-row.cycle {
+  opacity: 0.7;
+}
+.k-row.cycle .k-status {
+  color: var(--amber);
+}
+.k-row.cycle .mono {
+  text-decoration: line-through;
+}
+.k-row.unused {
+  opacity: 0.45;
+}
+.forest-block {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+@media (max-width: 640px) {
+  .kruskal-top {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* buckets: values stacked top-to-bottom in insertion order, so 10 buckets fit side by side */
+.bucket-row {
+  gap: 6px;
+}
+.bucket {
+  flex: 1 1 0;
+  min-width: 58px;
+}
+.bucket-items {
+  flex-direction: column;
+  flex-wrap: nowrap;
+  justify-content: flex-start;
+  align-items: stretch;
+  gap: 4px;
+  padding: 6px 5px;
+  min-height: 112px;
+}
+.bucket .num-chip {
+  width: auto;
+  height: 28px;
+  justify-content: center;
+}
+.bucket .num-chip b {
+  padding-bottom: 0;
+}
+.bucket .num-bar {
+  top: 0;
+  right: auto;
+  height: 100%;
+  width: var(--h);
+}
+.bucket-empty {
+  align-self: center;
+  margin-top: auto;
+}
+.bucket-foot span {
+  font-size: 0.62rem;
+  white-space: nowrap;
 }
